@@ -22,7 +22,7 @@ Built upon rigorous and well-structured underlying logic, NetWiz delivers not on
 
 📦 SmartGhost Offline Full Recovery: Much more than just a setup wizard, NetWiz pioneers a perfect closed-loop backup and restore ecosystem. Powered by the original "SmartGhost Full Offline System Recovery" technology, it requires no continuous internet connection and eliminates the fear of cross-version firmware flashing. It can perfectly clone and restore all your third-party plugins and complex network configs onto newly flashed, completely offline firmware—all while delivering commercial-grade Out-of-Memory (OOM) protection and a seamless cross-subnet recovery experience.
 
-![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg) ![OpenWrt](https://img.shields.io/badge/OpenWrt-23.05_|_25.x+-blue.svg) ![ImmortalWrt](https://img.shields.io/badge/ImmortalWrt-Supported-orange.svg) ![Downloads](https://img.shields.io/github/downloads/huchd0/luci-app-netwiz/total.svg?logo=github) ![Views](https://komarev.com/ghpvc/?username=huchd0-luci-app-netwiz&label=Views&color=blue&style=flat) ![License](https://img.shields.io/badge/License-GPL--3.0-green.svg)
+![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg) ![OpenWrt](https://img.shields.io/badge/OpenWrt-23.05_|_25.x+-blue.svg) ![ImmortalWrt](https://img.shields.io/badge/ImmortalWrt-Supported-orange.svg) ![Downloads](https://img.shields.io/github/downloads/sdxmhs/luci-app-netwiz/total.svg?logo=github) ![Views](https://komarev.com/ghpvc/?username=sdxmhs-luci-app-netwiz&label=Views&color=blue&style=flat) ![License](https://img.shields.io/badge/License-GPL--3.0-green.svg)
 
 ---
 
@@ -39,7 +39,7 @@ Tailored perfectly for novice users, it enables secure, one-click configuration 
 [Use the one-click command for quick installation.](#install)
 
 ```bash
-if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
+if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
 ```
 
 ## 🤝 Compatibility Guide
@@ -239,12 +239,12 @@ NetWiz 的“零外部依赖”，无任何 C/C++/Go 编译件、第三方模块
 我们提供了一键智能安装脚本。无论你是老系统还是新系统，只需在 SSH 终端中直接复制并执行以下单行命令，即可自动完成 **【判断系统架构 -> 下载对应格式 -> 安装 -> 修复权限与清理缓存】** 的全流程：
 
 ```bash
-if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
+if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
 ```
 
 💡 **提示**：如果你的网络无法直接访问 GitHub Raw，可以在链接前加上代理加速，例如：
 ```bash
-if wget -qO /tmp/nw_inst.sh https://ghproxy.net/https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
+if wget -qO /tmp/nw_inst.sh https://ghproxy.net/https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi
 ```
 
 ---
@@ -344,7 +344,7 @@ uci commit netwiz
 
 如果您觉得这个插件让您的网络配置体验变得更加优雅、省心，欢迎请作者喝杯咖啡，这将是我持续维护与更新的最大动力！❤️
 
-<img src="https://github.com/huchd0/openwrt-x86-64-build/blob/master/.github/Donate.jpg" width="680" alt="Donate">
+<img src="https://github.com/sdxmhs/openwrt-x86-64-build/blob/master/.github/Donate.jpg" width="680" alt="Donate">
 
 ---
 
