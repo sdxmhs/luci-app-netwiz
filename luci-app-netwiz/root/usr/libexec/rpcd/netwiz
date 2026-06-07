@@ -90,7 +90,7 @@ watchdog_pppoe_ipv6() {
 
 case "$1" in
     list)
-        echo '{ "set_network": { "mode": "string", "arg1": "string", "arg2": "string", "arg3": "string", "arg4": "string", "arg5": "string", "arg6": "string" }, "set_password": { "password": "string" }, "check_wifi": {}, "confirm": {}, "smart_backup": { "type": "string" }, "smart_restore_exec": { "filepath": "string" }, "check_backup": {}, "check_storage": {}, "check_restore_status": {}, "check_ip_conflict": { "ip": "192.168.1.254" }, "check_missing_pkgs": {} }'
+        echo '{ "set_network": { "mode": "string", "arg1": "string", "arg2": "string", "arg3": "string", "arg4": "string", "arg5": "string", "arg6": "string" }, "set_password": { "password": "string" }, "check_wifi": {}, "confirm": {}, "smart_backup": { "type": "string" }, "smart_restore_exec": { "filepath": "string" }, "check_backup": {}, "check_storage": {}, "check_restore_status": {}, "check_ip_conflict": { "ip": "192.168.1.254" }, "check_missing_pkgs": {}, "get_wizard_status": {}, "set_wizard_status": { "mode": "string" } }'
         exit 0
         ;;
     call)
@@ -228,6 +228,47 @@ case "$1" in
                     echo '{ "status": "safe" }'
                 fi
                 ;;
+
+            # 获取向导状态与智能探针
+                get_wizard_status)
+                    configured=$(uci -q get netwiz.global.configured)
+                    [ -z "$configured" ] && configured=0
+                    
+                    wizard_enable=$(uci -q get netwiz.main.wizard_enable)
+                    [ -z "$wizard_enable" ] && wizard_enable=1
+
+                    is_pppoe=0
+                    wan_proto=$(uci -q get network.wan.proto)
+                    wan_user=$(uci -q get network.wan.username)
+                    if [ "$wan_proto" = "pppoe" ] && [ -n "$wan_user" ]; then
+                        is_pppoe=1
+                    fi
+
+                    echo "{\"configured\": $configured, \"wizard_enable\": $wizard_enable, \"is_pppoe\": $is_pppoe}"
+                    exit 0
+                    ;;
+
+                # 状态锁控
+                set_wizard_status)
+                    input=$(cat)
+                    mode=$(echo "$input" | jsonfilter -e '@.mode')
+                    
+                    if [ "$mode" = "skip" ]; then
+                        # 普通跳过：解开 302 全局劫持，但保留下次弹窗资格
+                        uci -q set netwiz.global.configured='1'
+                        # wizard_enable 保持 1 不变
+                        uci commit netwiz
+                    elif [ "$mode" = "done" ]; then
+                        # 彻底完成/不再提示：解开 302 全局劫持，且永久关闭弹窗
+                        uci -q set netwiz.global.configured='1'
+                        uci -q set netwiz.main.wizard_enable='0'
+                        uci commit netwiz
+                    fi
+                    
+                    echo '{"result": 0}'
+                    exit 0
+                    ;;
+
             set_network)
                 set +e
                 
