@@ -224,7 +224,7 @@ var T = {
     'TXT_DNS2': _('Secondary DNS:'),
     'TIP_IPV6_WARN':_('⚠️ Non-standard parameters (Default configuration recommended)'),
     'PH_PWD_TIP': '💡 ' + _('This password will be used for logging into the router web interface and SSH. Setting it now is highly recommended.'),
-    // ===== 新增防呆与冲突拦截词条 =====
+    // ===== 防呆与冲突拦截词条 =====
     'M_WAN_DOWN_TIT': _('Cable Unplugged or Wrong Port'),
     'M_WAN_DOWN_MSG': _('System detected NO SIGNAL on the <b>WAN port</b>!<br><br><b style="color:#ef4444;">Troubleshooting:</b><br>1. Did you plug the upstream cable into the <b>LAN port</b>?<br>2. Are both ends plugged in tightly? Is the modem powered on?<br>'),
     'M_WAN_DOWN_WAIT': _('Detecting in background... This will close automatically once connected.'),
@@ -359,7 +359,7 @@ var getWanStatus = rpc.declare({ object: 'network.interface', method: 'dump', ex
 var callNetCheckWifi = rpc.declare({ object: 'netwiz', method: 'check_wifi', expect: { '': {} } });
 var callSetPassword = rpc.declare({ object: 'netwiz', method: 'set_password', params: ['password'], expect: { result: 0 } });
 var callSystemBoard = rpc.declare({ object: 'system', method: 'board', expect: { '': {} } });
-// 增加智能备份和恢复的接口声明
+// 智能备份和恢复的接口声明
 var callSmartBackup = rpc.declare({ object: 'netwiz', method: 'smart_backup', params: ['type'], expect: { '': {} } });
 var callCheckBackup = rpc.declare({ object: 'netwiz', method: 'check_backup', expect: { '': {} } });
 var callSmartRestoreExec = rpc.declare({ object: 'netwiz', method: 'smart_restore_exec', params: ['filepath'], expect: { result: 0 } });
@@ -367,6 +367,8 @@ var callCheckStorage = rpc.declare({ object: 'netwiz', method: 'check_storage', 
 var callCheckRestoreStatus = rpc.declare({ object: 'netwiz', method: 'check_restore_status', expect: { '': {} } });
 var callCheckIpConflict = rpc.declare({ object: 'netwiz', method: 'check_ip_conflict', params: ['ip'], expect: { '': {} } });
 var callCheckMissingPkgs = rpc.declare({ object: 'netwiz', method: 'check_missing_pkgs', expect: { '': {} } });
+var callGetWizardStatus = rpc.declare({ object: 'netwiz', method: 'get_wizard_status', expect: { } });
+var callSetWizardStatus = rpc.declare({ object: 'netwiz', method: 'set_wizard_status', params: ['mode'], expect: { result: 0 } });
 
 return view.extend({
     handleSaveApply: null,
@@ -936,21 +938,20 @@ return view.extend({
         // ================== 跳过与关闭逻辑 ==================
         var handleWizardExit = function(action) {
             var hideCb = container.querySelector('#wiz-hide-checkbox');
-
-            if (action === 'close') {
-                if (hideCb && hideCb.checked) {
-                    safeSetLocal('nw_wizard_never_show', '1');
-                } else {
-                    safeRemoveLocal('nw_wizard_never_show');
-                }
-            } else if (action === 'skip') {
-                // 跳过清除“不再提示”的缓存
-                safeRemoveLocal('nw_wizard_never_show');
+            var isFirstRun = (window._realIsConfigured !== '1');
+            
+            // 默认为普通跳过
+            var mode = 'skip';
+            
+            // 若用户勾选“不再提示”，强制升级为彻底关闭（完成）。
+            if (hideCb && hideCb.checked) {
+                mode = 'done';
             }
 
-            var isFirstRun = (window._realIsConfigured !== '1');
-
-            silentSaveWizardState('1').then(function() {
+            callSetWizardStatus(mode).then(function() {
+                if (mode === 'skip') {
+                    sessionStorage.setItem('nw_wizard_skip', '1'); // 普通跳过时，将当前网页会话写入免打扰模式。
+                }
                 executeExitNav(isFirstRun, action);
             }).catch(function() {
                 executeExitNav(isFirstRun, action);
@@ -985,7 +986,6 @@ return view.extend({
         var btnReopenWiz = container.querySelector('#btn-reopen-wizard');
         if (btnReopenWiz) {
             btnReopenWiz.addEventListener('click', function() {
-                silentSaveWizardState('1'); 
                 currentWizStep = 1;
                 updateWizSteps(1);
                 wArea1.style.display = 'block';
@@ -1180,18 +1180,10 @@ return view.extend({
             wizModal.style.display = 'none';
             openModal({ title: T['WIZ_TITLE'] || 'Configuring', msg: '<div style="color: #64748b; font-size: 16px; font-weight:bold;">' + T['MSG_WRITING'] + '</div>', spin: true });
 
-            // 网络配置的核心提取为一个函数，分流调用
+            // 呼叫done接口
             var doNetSetupConfig = function() {
-                // 1. 处理“不再提示”状态
-                var wizHideCb = container.querySelector('#wiz-hide-checkbox');
-                if (wizHideCb && wizHideCb.checked) {
-                    safeSetLocal('nw_wizard_never_show', '1');
-                } else {
-                    safeRemoveLocal('nw_wizard_never_show');
-                }
-
-                // 2. 提交配置，底层必须强制写入 '1' 永久解锁 CGI 拦截
-                silentSaveWizardState('0').then(function() {
+                // 提交配置，底层必须强制写入'done'永久解锁302劫持，并彻底关闭向导
+                callSetWizardStatus('done').then(function() {
                     var applyPromise;
                     if (isSkipWifi) {
                         if (wType === 'pppoe') {
@@ -1445,33 +1437,40 @@ return view.extend({
             }
 
             // ================== 弹出向导 ==================
-            if (typeof uci !== 'undefined') {
-                uci.load('netwiz').then(function() {
-                    var isConfigured = safeUciGet('netwiz', 'global', 'configured', '0');
-                    var isWizEnabled = safeUciGet('netwiz', 'main', 'wizard_enable', '1');
-                    window._realIsConfigured = String(isConfigured);
+            if (wizModal) {
+                // 1锁：当前浏览器会话免打扰（防F5刷新）
+                if (sessionStorage.getItem('nw_wizard_skip') === '1') {
+                    wizModal.style.display = 'none';
+                } else {
+                    callGetWizardStatus().then(function(res) {
+                        window._realIsConfigured = String(res.configured || '0');
 
-                    // 读取本地浏览器是否勾选过“不再提示”
-                    var neverShow = safeGetLocal('nw_wizard_never_show');
+                        // 智能探针自动解封：如果是极客自己配好了PPPoE，但302劫持还没解开
+                        if (res.is_pppoe == 1 && res.configured == 0) {
+                            callSetWizardStatus('done').then(function() {
+                                sessionStorage.setItem('nw_wizard_skip', '1');
+                                wizModal.style.display = 'none';
+                            });
+                            return;
+                        }
 
-                    // 核心判断逻辑：
-                    if (window._realIsConfigured !== '1') {
-                        // 1. 第一次开机，显示向导
-                        if (wizModal) wizModal.style.display = 'flex';
-                    } else if (String(isWizEnabled) === '1' && neverShow !== '1') {
-                        // 2.平常，没有勾选“不再提示”
-                        if (wizModal) wizModal.style.display = 'flex';
-                    } else {
-                        // 3. 平常勾选“不再提示”
-                        if (wizModal) wizModal.style.display = 'none';
-                    }
-                }).catch(function() {
-                    window._realIsConfigured = '0';
-                    if (wizModal) wizModal.style.display = 'flex';
-                });
-            } else {
-                window._realIsConfigured = '0';
-                if (wizModal) wizModal.style.display = 'flex';
+                        // 2/3锁：后端向导已被永久关闭，或者探针发现已配置
+                        if (res.wizard_enable == 0 || res.is_pppoe == 1) {
+                            wizModal.style.display = 'none';
+                            return;
+                        }
+                        
+                        // 三重锁全开，说明是纯净初始状态，立刻叫出向导！
+                        wizModal.style.display = 'flex';
+                    }).catch(function() {
+                        // 网络请求异常兜底，照常弹出
+                        window._realIsConfigured = '0';
+                        wizModal.style.display = 'flex';
+                    });
+                }
+            }
+            if (btnReopenWiz) {
+                btnReopenWiz.style.display = '';
             }
             // ==========================================================
             
