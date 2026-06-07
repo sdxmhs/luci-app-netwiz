@@ -30,7 +30,7 @@ DOWNLOAD_SUCCESS=0
 
 for FILE in $FILES; do
     TARGET_FILE="${PKG_TYPE}_${FILE}.${PKG_TYPE}"
-    URL_DIRECT="https://github.com/huchd0/luci-app-netwiz/releases/latest/download/${TARGET_FILE}"
+    URL_DIRECT="https://github.com/sdxmhs/luci-app-netwiz/releases/latest/download/${TARGET_FILE}"
     PROXY_1="https://ghp.ci/${URL_DIRECT}"
     PROXY_2="https://ghproxy.net/${URL_DIRECT}"
     PROXY_3="https://github.moeyy.xyz/${URL_DIRECT}"
