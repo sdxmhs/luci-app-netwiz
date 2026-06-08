@@ -256,7 +256,11 @@ case "$1" in
                     if [ "$mode" = "skip" ]; then
                         # 普通跳过：解开 302 全局劫持，但保留下次弹窗资格
                         uci -q set netwiz.global.configured='1'
-                        # wizard_enable 保持 1 不变
+                        uci commit netwiz
+                    elif [ "$mode" = "restore" ]; then
+                        # 手动恢复弹窗：解开 302 全局劫持，且强行打开弹窗总开关
+                        uci -q set netwiz.global.configured='1'
+                        uci -q set netwiz.main.wizard_enable='1'
                         uci commit netwiz
                     elif [ "$mode" = "done" ]; then
                         # 彻底完成/不再提示：解开 302 全局劫持，且永久关闭弹窗
