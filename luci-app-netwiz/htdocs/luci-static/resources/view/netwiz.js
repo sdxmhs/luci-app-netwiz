@@ -77,7 +77,7 @@ var T = {
     'WARN_MAIN': _('<b style="font-size: 16px;">Main Router Mode Enabled:</b><br>1. DHCP will be enabled. This device assigns IPs.<br>2. If LAN IP changes, ensure your client is in the same subnet to avoid <b style="color: #ef4444;">losing access</b>.'),
     'LBL_LAN_IP': _('Device LAN IP'),
     'LBL_LAN_GW': _('LAN Gateway'),
-    // ===== 一键探测与拦截防呆新增 =====
+    // ===== 一键探测与拦截防呆 =====
     'BTN_AUTO_DETECT': _('Auto Detect'),
     'MSG_DETECT_SUCC': _('Upstream subnet detected, recommended IP assigned'),
     'MSG_DETECT_FAIL': _('Detection failed, cannot get upstream gateway'),
@@ -224,7 +224,7 @@ var T = {
     'TXT_DNS2': _('Secondary DNS:'),
     'TIP_IPV6_WARN':_('⚠️ Non-standard parameters (Default configuration recommended)'),
     'PH_PWD_TIP': '💡 ' + _('This password will be used for logging into the router web interface and SSH. Setting it now is highly recommended.'),
-    // ===== 新增防呆与冲突拦截词条 =====
+    // ===== 防呆与冲突拦截词条 =====
     'M_WAN_DOWN_TIT': _('Cable Unplugged or Wrong Port'),
     'M_WAN_DOWN_MSG': _('System detected NO SIGNAL on the <b>WAN port</b>!<br><br><b style="color:#ef4444;">Troubleshooting:</b><br>1. Did you plug the upstream cable into the <b>LAN port</b>?<br>2. Are both ends plugged in tightly? Is the modem powered on?<br>'),
     'M_WAN_DOWN_WAIT': _('Detecting in background... This will close automatically once connected.'),
@@ -359,7 +359,7 @@ var getWanStatus = rpc.declare({ object: 'network.interface', method: 'dump', ex
 var callNetCheckWifi = rpc.declare({ object: 'netwiz', method: 'check_wifi', expect: { '': {} } });
 var callSetPassword = rpc.declare({ object: 'netwiz', method: 'set_password', params: ['password'], expect: { result: 0 } });
 var callSystemBoard = rpc.declare({ object: 'system', method: 'board', expect: { '': {} } });
-// 增加智能备份和恢复的接口声明
+// 智能备份和恢复的接口声明
 var callSmartBackup = rpc.declare({ object: 'netwiz', method: 'smart_backup', params: ['type'], expect: { '': {} } });
 var callCheckBackup = rpc.declare({ object: 'netwiz', method: 'check_backup', expect: { '': {} } });
 var callSmartRestoreExec = rpc.declare({ object: 'netwiz', method: 'smart_restore_exec', params: ['filepath'], expect: { result: 0 } });
@@ -937,21 +937,25 @@ return view.extend({
 
         // ================== 跳过与关闭逻辑 ==================
         var handleWizardExit = function(action) {
-            var hideCb = container.querySelector('#wiz-hide-checkbox');
+            var hideCb = container.querySelector('#wiz-hide-checkbox') || document.getElementById('nw-never-remind');
             var isFirstRun = (window._realIsConfigured !== '1');
             
-            // 默认为普通跳过
             var mode = 'skip';
             
-            // 若用户勾选“不再提示”，强制升级为彻底关闭（完成）。
-            if (hideCb && hideCb.checked) {
-                mode = 'done';
+            if (action === 'skip') {
+                // 点击的是【跳过本次】：绝对跳过，无视复选框
+                mode = 'skip';
+            } else {
+                // 点击的是【右上角 X】：复选框有效
+                if (hideCb && hideCb.checked) {
+                    mode = 'done';    // 勾选 -> 永久关闭
+                } else {
+                    mode = 'restore'; // 没勾 -> 恢复下次继续弹
+                }
             }
 
+            // 直接发送给后端执行，去掉了所有前端 sessionStorage 操作，保证 F5 刷新有效
             callSetWizardStatus(mode).then(function() {
-                if (mode === 'skip') {
-                    sessionStorage.setItem('nw_wizard_skip', '1'); // 普通跳过时，将当前网页会话写入免打扰模式。
-                }
                 executeExitNav(isFirstRun, action);
             }).catch(function() {
                 executeExitNav(isFirstRun, action);
@@ -1176,14 +1180,24 @@ return view.extend({
                 return;
             }
             var keepIpv6 = window._trueIpv6State;
+            
+            // 提前获取是否为首次刷机
+            var isFirstRun = (window._realIsConfigured !== '1'); 
 
             wizModal.style.display = 'none';
             openModal({ title: T['WIZ_TITLE'] || 'Configuring', msg: '<div style="color: #64748b; font-size: 16px; font-weight:bold;">' + T['MSG_WRITING'] + '</div>', spin: true });
 
-            // 呼叫done接口
             var doNetSetupConfig = function() {
-                // 提交配置，底层必须强制写入'done'永久解锁302劫持，并彻底关闭向导
-                callSetWizardStatus('done').then(function() {
+                var hideCb = container.querySelector('#wiz-hide-checkbox') || document.getElementById('nw-never-remind');
+                
+                // 【完成配置逻辑】：默认彻底关闭(done)
+                // 只有在日常维护时，去掉了勾选，才恢复弹窗(restore)
+                var submitMode = 'done';
+                if (!isFirstRun && hideCb && !hideCb.checked) {
+                    submitMode = 'restore';
+                }
+
+                callSetWizardStatus(submitMode).then(function() {
                     var applyPromise;
                     if (isSkipWifi) {
                         if (wType === 'pppoe') {
@@ -1229,31 +1243,34 @@ return view.extend({
                             fetchProbe('http://' + h + '/cgi-bin/luci/?v=' + Date.now(), 2000).then(function() { 
                                 clearInterval(checkSameTimer); 
                                 
-                                // ================== 自动登录官方后台 ==================
                                 document.getElementById('nw-global-msg').innerHTML = '<div style="color: #10b981; font-size: 16px; font-weight: bold;">' + T['MSG_SETUP_DONE'] + '</div>';
                                 
-                                if (adminPwd) {
-                                    // 创建隐藏表单，登录官方页面
-                                    var form = document.createElement('form');
-                                    form.method = 'POST';
-                                    form.action = 'http://' + h + '/cgi-bin/luci/';
-                                    form.style.display = 'none';
-                                    
-                                    var u = document.createElement('input');
-                                    u.type = 'hidden'; u.name = 'luci_username'; u.value = 'root'; // 默认账号 root
-                                    form.appendChild(u);
-                                    
-                                    var p = document.createElement('input');
-                                    p.type = 'hidden'; p.name = 'luci_password'; p.value = adminPwd; // 向导里的密码
-                                    form.appendChild(p);
-                                    
-                                    document.body.appendChild(form);
-                                    form.submit(); // 提交！LuCI 鉴权成功后，转到系统总览页
+                                // 跳转逻辑：精准分流
+                                if (isFirstRun) {
+                                    // 第一次刷机配置完毕，跳官方 LuCI 页面
+                                    if (adminPwd) {
+                                        var form = document.createElement('form');
+                                        form.method = 'POST';
+                                        form.action = 'http://' + h + '/cgi-bin/luci/';
+                                        form.style.display = 'none';
+                                        
+                                        var u = document.createElement('input');
+                                        u.type = 'hidden'; u.name = 'luci_username'; u.value = 'root'; 
+                                        form.appendChild(u);
+                                        
+                                        var p = document.createElement('input');
+                                        p.type = 'hidden'; p.name = 'luci_password'; p.value = adminPwd; 
+                                        form.appendChild(p);
+                                        
+                                        document.body.appendChild(form);
+                                        form.submit(); 
+                                    } else {
+                                        window.location.replace('http://' + h + '/cgi-bin/luci/');
+                                    }
                                 } else {
-                                    // 如果用户没改密码 (留空)，就走正常的跳转
-                                    window.location.replace('http://' + h + '/cgi-bin/luci/');
+                                    // 日常维护配置完毕，刷新当前 NetWiz 插件页
+                                    window.location.reload();
                                 }
-                                // ==============================================================
 
                             }).catch(function() {});
                         }, 3000);
@@ -1436,47 +1453,46 @@ return view.extend({
             }
             }
 
-            // ================== 弹出向导 ==================
+            // ================== 弹出向导 (智能拦截) ==================
             if (wizModal) {
-                // 1锁：当前浏览器会话免打扰（防F5刷新）
-                if (sessionStorage.getItem('nw_wizard_skip') === '1') {
-                    wizModal.style.display = 'none';
-                } else {
-                    callGetWizardStatus().then(function(res) {
-                        window._realIsConfigured = String(res.configured || '0');
+                callGetWizardStatus().then(function(res) {
+                    window._realIsConfigured = String(res.configured || '0');
+                    window._realWizardEnable = String(res.wizard_enable || '1'); // 全局调用
 
-                        // 智能探针自动解封：如果是极客自己配好了PPPoE，但302劫持还没解开
-                        if (res.is_pppoe == 1 && res.configured == 0) {
-                            callSetWizardStatus('done').then(function() {
-                                sessionStorage.setItem('nw_wizard_skip', '1');
-                                wizModal.style.display = 'none';
-                            });
-                            return;
-                        }
+                    // 初始化复选框UI：如果后端已经关了向导，界面上预设勾上「不再提示」
+                    var hideCb = document.getElementById('wiz-hide-checkbox') || document.getElementById('nw-never-remind');
+                    if (hideCb) {
+                        hideCb.checked = (window._realWizardEnable === '0');
+                    }
 
-                        // 2/3锁：后端向导已被永久关闭，或者探针发现已配置
-                        if (res.wizard_enable == 0 || res.is_pppoe == 1) {
+                    //探针自动解封，只有在「首次刷机（configured == 0）」时，探针才介入
+                    //日常使用（configured == 1），探针不生效，wizard_enable的状态生效
+                    if (res.is_pppoe == 1 && res.configured == 0) {
+                        callSetWizardStatus('done').then(function() {
                             wizModal.style.display = 'none';
-                            return;
-                        }
-                        
-                        // 三重锁全开，说明是纯净初始状态，立刻叫出向导！
-                        wizModal.style.display = 'flex';
-                    }).catch(function() {
-                        // 网络请求异常兜底，照常弹出
-                        window._realIsConfigured = '0';
-                        wizModal.style.display = 'flex';
-                    });
-                }
+                        });
+                        return;
+                    }
+
+                    //常规拦截判断：向导总开关已关闭
+                    if (res.wizard_enable == 0) {
+                        wizModal.style.display = 'none';
+                        return;
+                    }
+                    
+                    //总开关为1，且没被探针误杀，弹出向导
+                    wizModal.style.display = 'flex';
+                }).catch(function() {
+                    window._realIsConfigured = '0';
+                    window._realWizardEnable = '1';
+                    wizModal.style.display = 'flex';
+                });
             }
             if (btnReopenWiz) {
                 btnReopenWiz.style.display = '';
             }
             // ==========================================================
-            
-            if (btnReopenWiz) {
-                btnReopenWiz.style.display = '';
-            }
+
         }).catch(function(err) {});
 
         function updateStatusDisplay(isSilent) {
