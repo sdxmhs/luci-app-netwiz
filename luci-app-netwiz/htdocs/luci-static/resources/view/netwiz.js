@@ -12,7 +12,7 @@ var T = {
     'Network_Wizard': _('Network Wizard'),
     'TITLE': _('Netwiz NETWORK SETUP'),
     'SUBTITLE': _('Pure · Secure · Non-destructive Minimalist Config'),
-    'APP_VERSION': 'v1.4.0',
+    'APP_VERSION': 'v1.0.0',
     'MODE_ROUTER_TITLE': _('DHCP / Static IP (WAN)'),
     'MODE_ROUTER_DESC': _('Automatically obtain IP from the upstream network, or manually set a static IP.'),
     'MODE_PPPOE_TITLE': _('PPPoE Dial-up'),
@@ -611,8 +611,7 @@ return view.extend({
             '   </div>',
             '   <div class="nw-header">',
             '    <div class="nw-title-wrap">',
-            '      <div class="nw-main-title">{{TITLE}}</div>',
-            '      <div class="nw-version-tag">{{APP_VERSION}} <div class="nw-version-dot" style="display: none;"></div></div>',
+            '    <div class="nw-main-title"><span class="nw-title-wrap">{{TITLE}}<span class="nw-version-tag" title="">{{APP_VERSION}}<span class="nw-version-dot"></span></span></span></div>',
             '    </div>',
             '    <p>{{SUBTITLE}}</p>',
             '    <div id="btn-reopen-wizard" class="nw-reopen-btn">{{WIZ_REOPEN}}</div>',
@@ -1057,6 +1056,98 @@ return view.extend({
     },
 
     bindEvents: function (container) {
+
+        // ==========================================
+        // 版本更新与右上角小红点逻辑 (联动外部 CSS)
+        // ==========================================
+        function doUpdateCheck() {
+            var now = Date.now(), cacheKey = 'nw_last_update_check';
+            var cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+            var cooldown = parseInt(localStorage.getItem('nw_update_cooldown') || '0', 10);
+            
+            if (now - cooldown < 3 * 60 * 1000) return;
+
+            // 获取当前真实版本号 (直接读取 T 字典里的变量，彻底解决版本冲突)
+            var currentVer = T['APP_VERSION'] || 'v1.0.0';
+
+            var showReadyBadge = function(latestVer, rawText) {
+                var cleanText = rawText.split('---')[0].replace(/### ✨ 最新版发布/g, '').trim();
+                
+                // ⚠️ 修复：改用 class 选择器 (.) 来寻找元素，匹配您的 HTML
+                var verTag = container.querySelector('.nw-version-tag');
+                var redDot = container.querySelector('.nw-version-dot');
+                
+                if (!verTag || !redDot) return;
+                if (typeof __cmp === 'function') {
+                    if (__cmp(latestVer, currentVer) <= 0) return;
+                }
+
+                // 🌟 触发 UI 变化：显示红点，加入 has-update 类使标签变绿且可点击
+                redDot.style.display = 'block';
+                verTag.classList.add('has-update');
+                verTag.title = '发现新版本: ' + latestVer + ' (点击更新)';
+
+                var newVerTag = verTag.cloneNode(true);
+                verTag.parentNode.replaceChild(newVerTag, verTag);
+                verTag = newVerTag;
+
+                verTag.addEventListener('click', function() {
+                    openModal({
+                        title: '✨ 发现新版本 (' + latestVer + ')',
+                        msg: '<b>准备好安装更新了吗？</b><br><br><div style="text-align:left; font-size:13px; background:#f1f5f9; padding:10px; margin-top:10px; border-radius:6px; max-height:150px; overflow-y:auto; border:1px solid #cbd5e1;">' + cleanText.replace(/\n/g, '<br>') + '</div>',
+                        okText: '立即更新', cancelText: '稍后再说',
+                        onOk: function() {
+                            localStorage.setItem('nw_update_cooldown', Date.now());
+                            localStorage.removeItem(cacheKey);
+                            
+                            redDot.style.display = 'none';
+                            verTag.classList.remove('has-update');
+                            var gm = document.getElementById('nw-global-modal'); if (gm) gm.style.display = 'none';
+
+                            openModal({ title: '🔄 系统升级中', msg: '正在下载并替换核心文件，请勿断电...', hideCancel: true, hideOk: true, spin: true });
+                            callNetSetup('do_install').then(function(){
+                                setTimeout(function(){ window.location.reload(); }, 6000);
+                            }).catch(function(){});
+                        }
+                    });
+                });
+            };
+
+            var triggerDownload = function(latestVer, rawText) {
+                if (latestVer && typeof __cmp === 'function') {
+                    if (__cmp(latestVer, currentVer) > 0) {
+                        callNetSetup('check_update', latestVer).then(function(res) {
+                            var resCode = (res && typeof res === 'object' && res.result !== undefined) ? res.result : res;
+                            if (String(resCode) === '1') {
+                                showReadyBadge(latestVer, rawText);
+                            } else {
+                                callNetSetup('prepare_update', latestVer);
+                                var pollCount = 0, pollStatus = setInterval(function() {
+                                    pollCount++;
+                                    if (pollCount > 15) { clearInterval(pollStatus); return; }
+                                    callNetSetup('check_update', latestVer).then(function(r) {
+                                        var rCode = (r && typeof r === 'object' && r.result !== undefined) ? r.result : r;
+                                        if (String(rCode) === '1') { clearInterval(pollStatus); showReadyBadge(latestVer, rawText); }
+                                    }).catch(function(){});
+                                }, 4000);
+                            }
+                        }).catch(function(e) {});
+                    }
+                }
+            };
+
+            if (cached.time && (now - cached.time < 5 * 60 * 1000) && cached.version) {
+                triggerDownload(cached.version, cached.body || ''); return; 
+            }
+            fetch('https://api.github.com/repos/huchd0/luci-app-netwiz/releases?t=' + now, { cache: 'no-store' }).then(function(res) { return res.json(); }).then(function(data) {
+                if (data && data.length > 0) {
+                    localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: data[0].tag_name, body: data[0].body || '' }));
+                    triggerDownload(data[0].tag_name, data[0].body || '');
+                }
+            }).catch(function(e) {});
+        }
+        setTimeout(doUpdateCheck, 1500);
+
         // =================高级设置弹窗与逻辑=================
         function showAdvModal(title, html, onOk) {
             var bg = document.createElement('div');
