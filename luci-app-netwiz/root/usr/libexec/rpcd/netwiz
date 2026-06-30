@@ -905,6 +905,72 @@ case "$1" in
                 arg5=$(echo "$input" | jsonfilter -e '@.arg5')
                 arg6=$(echo "$input" | jsonfilter -e '@.arg6')
 
+                # ==========================================
+                # 拦截执行热更新 (OTA) 包含主程序与多语言包联动
+                # ==========================================
+                if [ "$mode" = "prepare_update" ]; then
+                    echo '{"result":0}'
+                    rm -f /tmp/netwiz_update.* /tmp/nw_ota_*.pkg
+                    echo "$arg1" > /tmp/netwiz_update.version
+                    
+                    cat << 'EOF' > /tmp/nw_dl.sh
+#!/bin/sh
+# 判断系统架构，自动匹配文件前缀与后缀
+if command -v apk >/dev/null 2>&1; then 
+    PREFIX="apk_"
+    EXT=".apk"
+else 
+    PREFIX="ipk_"
+    EXT=".ipk"
+fi
+
+# 拼接 3 个目标文件：主程序、简中、繁中
+F_MAIN="${PREFIX}luci-app-netwiz${EXT}"
+F_CN="${PREFIX}luci-i18n-netwiz-zh-cn${EXT}"
+F_TW="${PREFIX}luci-i18n-netwiz-zh-tw${EXT}"
+
+DL_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
+P_URL="https://mirror.ghproxy.com/${DL_URL}"
+
+# 下载逻辑：只有 3 个文件都下载成功，下发 .ready 信号给前端亮红点
+if { wget -q -T 15 -O /tmp/nw_ota_main.pkg "$DL_URL/$F_MAIN" || wget -q -T 15 -O /tmp/nw_ota_main.pkg "$P_URL/$F_MAIN"; } && \
+   { wget -q -T 15 -O /tmp/nw_ota_cn.pkg "$DL_URL/$F_CN" || wget -q -T 15 -O /tmp/nw_ota_cn.pkg "$P_URL/$F_CN"; } && \
+   { wget -q -T 15 -O /tmp/nw_ota_tw.pkg "$DL_URL/$F_TW" || wget -q -T 15 -O /tmp/nw_ota_tw.pkg "$P_URL/$F_TW"; }; then
+    touch /tmp/netwiz_update.ready
+fi
+EOF
+                    chmod +x /tmp/nw_dl.sh
+                    /tmp/nw_dl.sh >/dev/null 2>&1 &
+                    exit 0
+
+                elif [ "$mode" = "check_update" ]; then
+                    # 轮询检查是否全部下载完成
+                    if [ -f /tmp/netwiz_update.ready ]; then
+                        echo '{"result": 1}'
+                    else
+                        echo '{"result": 0}'
+                    fi
+                    exit 0
+
+                elif [ "$mode" = "do_install" ]; then
+                    # 执行静默全家桶安装并清理缓存
+                    echo '{"result":0}'
+                    (
+                        sleep 2
+                        if command -v apk >/dev/null 2>&1; then
+                            apk add --allow-untrusted --force-overwrite /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg
+                        else
+                            opkg install --force-reinstall --force-overwrite /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg
+                        fi
+                        
+                        # 安装完毕，彻底清理
+                        rm -f /tmp/netwiz_update.* /tmp/nw_dl.sh /tmp/nw_ota_*.pkg
+                        rm -f /tmp/luci-indexcache* /tmp/luci-modulecache*
+                    ) >/dev/null 2>&1 &
+                    exit 0
+                fi
+                # ==========================================
+
                 validate_strict_ip() {
                     if [ -n "$1" ] && ! echo "$1" | awk -F. 'NF==4 && $1>=0 && $1<=255 && $2>=0 && $2<=255 && $3>=0 && $3<=255 && $4>=0 && $4<=255 {print "ok"}' | grep -q "ok"; then
                         log "安全拦截 IP格式非法"
