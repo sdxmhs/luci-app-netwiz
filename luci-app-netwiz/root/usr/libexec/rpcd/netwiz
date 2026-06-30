@@ -889,7 +889,7 @@ case "$1" in
                     uci set netwiz.global.configured='1'
                     uci set netwiz.main.wizard_enable='0'
                     uci commit netwiz
-                    sync  # 将RAM缓存瞬间刷入物理闪存，防止重启网络时丢失
+                    sync  # 将RAM缓存刷入物理闪存
                     
                     log "接收到前端下发的新配置，删除所有历史备份记录"
 
@@ -906,71 +906,96 @@ case "$1" in
                 arg6=$(echo "$input" | jsonfilter -e '@.arg6')
 
                 # ==========================================
-                # 拦截执行热更新 (OTA) 包含主程序与多语言包联动
+                # 拦截执行热更新 (OTA)
                 # ==========================================
                 if [ "$mode" = "prepare_update" ]; then
                     echo '{"result":0}'
                     rm -f /tmp/netwiz_update.* /tmp/nw_ota_*.pkg
                     echo "$arg1" > /tmp/netwiz_update.version
-                    
+
                     cat << 'EOF' > /tmp/nw_dl.sh
 #!/bin/sh
-# 获取前端传来的精确版本号
 TARGET_VER=$(cat /tmp/netwiz_update.version)
 
-# 判断系统架构，自动匹配文件前缀与后缀
-if command -v apk >/dev/null 2>&1; then 
+if command -v apk >/dev/null 2>&1; then
     PREFIX="apk_"
     EXT=".apk"
-else 
+else
     PREFIX="ipk_"
     EXT=".ipk"
 fi
 
-# 拼接 3 个目标文件：主程序、简中、繁中
 F_MAIN="${PREFIX}luci-app-netwiz${EXT}"
 F_CN="${PREFIX}luci-i18n-netwiz-zh-cn${EXT}"
 F_TW="${PREFIX}luci-i18n-netwiz-zh-tw${EXT}"
 
-# 直接使用绝对版本号，放弃 latest，完美兼容 ghproxy 加速！
-DL_URL="https://github.com/huchd0/luci-app-netwiz/releases/download/${TARGET_VER}"
-P_URL="https://mirror.ghproxy.com/${DL_URL}"
+URL_BASE="https://github.com/huchd0/luci-app-netwiz/releases/download/${TARGET_VER}"
+PROXY_BASE="https://mirror.ghproxy.com/${URL_BASE}"
 
-# 下载逻辑：只有 3 个文件都下载成功，下发 .ready 信号给前端亮红点
-if { wget -q -T 15 -O /tmp/nw_ota_main.pkg "$DL_URL/$F_MAIN" || wget -q -T 15 -O /tmp/nw_ota_main.pkg "$P_URL/$F_MAIN"; } && \
-   { wget -q -T 15 -O /tmp/nw_ota_cn.pkg "$DL_URL/$F_CN" || wget -q -T 15 -O /tmp/nw_ota_cn.pkg "$P_URL/$F_CN"; } && \
-   { wget -q -T 15 -O /tmp/nw_ota_tw.pkg "$DL_URL/$F_TW" || wget -q -T 15 -O /tmp/nw_ota_tw.pkg "$P_URL/$F_TW"; }; then
+# 定义支持 3 次重试 + 忽略证书 + 文件大小校验的下载函数
+dl_file() {
+    local fname=$1
+    local out=$2
+    for i in 1 2 3; do
+        wget -qO "$out" --no-check-certificate --timeout=15 "$URL_BASE/$fname"
+        if [ "$?" -ne 0 ] || [ ! -s "$out" ]; then
+            wget -qO "$out" --no-check-certificate --timeout=15 "$PROXY_BASE/$fname"
+        fi
+        if [ -s "$out" ]; then
+            return 0
+        fi
+        sleep 2
+    done
+    return 1
+}
+
+# 只要主程序下载成功，亮红点
+if dl_file "$F_MAIN" "/tmp/nw_ota_main.pkg"; then
+    dl_file "$F_CN" "/tmp/nw_ota_cn.pkg"
+    dl_file "$F_TW" "/tmp/nw_ota_tw.pkg"
     touch /tmp/netwiz_update.ready
 fi
 EOF
                     chmod +x /tmp/nw_dl.sh
-                    /tmp/nw_dl.sh >/dev/null 2>&1 &
+                    /tmp/nw_dl.sh </dev/null >/dev/null 2>&1 &
                     exit 0
 
+                # 检查更新就绪
                 elif [ "$mode" = "check_update" ]; then
-                    # 轮询检查是否全部下载完成
-                    if [ -f /tmp/netwiz_update.ready ]; then
-                        echo '{"result": 1}'
+                    if [ -f /tmp/netwiz_update.ready ] && [ "$(cat /tmp/netwiz_update.version 2>/dev/null)" = "$arg1" ]; then
+                        echo '{"result":1}'
                     else
-                        echo '{"result": 0}'
+                        echo '{"result":0}'
                     fi
                     exit 0
 
+                # 无感热重载
                 elif [ "$mode" = "do_install" ]; then
-                    # 执行静默全家桶安装并清理缓存
                     echo '{"result":0}'
-                    (
-                        sleep 2
-                        if command -v apk >/dev/null 2>&1; then
-                            apk add --allow-untrusted --force-overwrite /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg
-                        else
-                            opkg install --force-reinstall --force-overwrite /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg
-                        fi
-                        
-                        # 安装完毕，彻底清理
-                        rm -f /tmp/netwiz_update.* /tmp/nw_dl.sh /tmp/nw_ota_*.pkg
-                        rm -f /tmp/luci-indexcache* /tmp/luci-modulecache*
-                    ) >/dev/null 2>&1 &
+                    cat << 'EOF' > /tmp/nw_install.sh
+#!/bin/sh
+sleep 2
+
+# 删除旧文件，防止保护机制触发
+rm -f /www/luci-static/resources/view/netwiz.js
+rm -f /usr/libexec/rpcd/netwiz
+
+if command -v apk >/dev/null 2>&1; then
+    apk del luci-app-netwiz >/dev/null 2>&1
+    apk add --allow-untrusted --force-overwrite /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg >/dev/null 2>&1
+else
+    opkg install /tmp/nw_ota_main.pkg /tmp/nw_ota_cn.pkg /tmp/nw_ota_tw.pkg --force-reinstall --force-overwrite --force-maintainer >/dev/null 2>&1
+fi
+
+# 清理旧缓存
+rm -rf /tmp/luci-modulecache/ /tmp/luci-indexcache* /tmp/luci-app-netwiz.*
+rm -f /tmp/netwiz_update.ready /tmp/netwiz_update.* /tmp/nw_ota_*.pkg /tmp/nw_install.sh
+
+# 重新生成JS版本号，且不会踢登录
+ubus call luci reload >/dev/null 2>&1
+EOF
+                    chmod +x /tmp/nw_install.sh
+                    /tmp/nw_install.sh </dev/null >/dev/null 2>&1 &
                     exit 0
                 fi
                 # ==========================================
