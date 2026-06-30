@@ -915,6 +915,9 @@ case "$1" in
                     
                     cat << 'EOF' > /tmp/nw_dl.sh
 #!/bin/sh
+# 获取前端传来的精确版本号
+TARGET_VER=$(cat /tmp/netwiz_update.version)
+
 # 判断系统架构，自动匹配文件前缀与后缀
 if command -v apk >/dev/null 2>&1; then 
     PREFIX="apk_"
@@ -929,7 +932,8 @@ F_MAIN="${PREFIX}luci-app-netwiz${EXT}"
 F_CN="${PREFIX}luci-i18n-netwiz-zh-cn${EXT}"
 F_TW="${PREFIX}luci-i18n-netwiz-zh-tw${EXT}"
 
-DL_URL="https://github.com/huchd0/luci-app-netwiz/releases/latest/download"
+# 直接使用绝对版本号，放弃 latest，完美兼容 ghproxy 加速！
+DL_URL="https://github.com/huchd0/luci-app-netwiz/releases/download/${TARGET_VER}"
 P_URL="https://mirror.ghproxy.com/${DL_URL}"
 
 # 下载逻辑：只有 3 个文件都下载成功，下发 .ready 信号给前端亮红点
