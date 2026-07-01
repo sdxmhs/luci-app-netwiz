@@ -190,7 +190,7 @@ jobs:
           body: |
          
             ### ✨ 最新版发布
-            ${{ github.event.inputs.release_notes }}
+            ${{ inputs.release_notes }}
             
             ---
             
