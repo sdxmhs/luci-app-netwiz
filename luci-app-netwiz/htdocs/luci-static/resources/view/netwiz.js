@@ -522,7 +522,7 @@ var T = {
                 '✍️ <b>' + _('Examples:') + '</b><br>' +
                 '<code style="background:#e2e8f0; padding:2px 6px; border-radius:4px; color:#0f172a; margin-top:2px; margin-bottom:4px; display:inline-block; word-break:break-all;">netwiz-probe.xxxx.workers.dev</code> ' + '<br>' +
                 '<code style="background:#e2e8f0; padding:2px 6px; border-radius:4px; color:#0f172a; margin-bottom:8px; display:inline-block; word-break:break-all;">http://your-vps-ip:8080/probe</code> ' + _('(VPS)') + '<br>' +
-                '🔗 <a href="https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/refs/heads/master/worker.js" target="_blank" style="color:#0284c7; text-decoration:underline; font-weight: bold;">' + _('Click to view Cloudflare tutorial & source code') + '</a>' +
+                '🔗 <a href="https://raw.githubusercontent.com/huchd0/luci-app-netwiz/refs/heads/master/worker.js" target="_blank" style="color:#0284c7; text-decoration:underline; font-weight: bold;">' + _('Click to view Cloudflare tutorial & source code') + '</a>' +
                 '</div>',
     'MSG_WOG_LINKAGE': _('To ensure the probe works correctly, the following dependent features have been automatically enabled:'),
     'MSG_WOG_LINK_V6': _('IPv6 Master Switch'),
@@ -802,8 +802,8 @@ return view.extend({
             '                <div style="font-size: 16.5px; font-weight: bold; color: #0f172a;">{{TXT_FULL_BACKUP_TIT}}</div>',
             '                <div style="font-size: 13px; color: #64748b; line-height: 1.6; text-align: left;">',
             '                    {{TXT_FULL_BACKUP_DESC}}',
-            '                    <div onclick="var t=this.querySelector(\'#nw-copy-tip\'); var el=document.createElement(\'textarea\'); el.value=\'if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi\'; el.style.position=\'absolute\'; el.style.left=\'-9999px\'; document.body.appendChild(el); el.select(); var ok=false; try{ ok=document.execCommand(\'copy\'); }catch(e){} document.body.removeChild(el); if(ok){ t.innerHTML=\'{{TXT_COPIED}}\'; t.style.color=\'#10b981\'; setTimeout(function(){ t.innerHTML=\'{{TXT_COPY_TIP}}\'; t.style.color=\'#64748b\'; }, 2000); }else{ t.innerHTML=\'{{TXT_COPY_FAIL}}\'; setTimeout(function(){ t.innerHTML=\'{{TXT_COPY_TIP}}\'; }, 2000); }" style="margin-top: 10px; padding: 12px 15px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;" onmouseover="this.style.background=\'#f1f5f9\'; this.style.borderColor=\'#5E72E4\';" onmouseout="this.style.background=\'#f8fafc\'; this.style.borderColor=\'#cbd5e1\';">',
-            '                       <code style="font-family: monospace; color: #334155; font-size: 13.5px; word-break: break-all; font-weight: bold; background: #e9ecef;">if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/sdxmhs/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi</code>',
+            '                    <div onclick="var t=this.querySelector(\'#nw-copy-tip\'); var el=document.createElement(\'textarea\'); el.value=\'if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi\'; el.style.position=\'absolute\'; el.style.left=\'-9999px\'; document.body.appendChild(el); el.select(); var ok=false; try{ ok=document.execCommand(\'copy\'); }catch(e){} document.body.removeChild(el); if(ok){ t.innerHTML=\'{{TXT_COPIED}}\'; t.style.color=\'#10b981\'; setTimeout(function(){ t.innerHTML=\'{{TXT_COPY_TIP}}\'; t.style.color=\'#64748b\'; }, 2000); }else{ t.innerHTML=\'{{TXT_COPY_FAIL}}\'; setTimeout(function(){ t.innerHTML=\'{{TXT_COPY_TIP}}\'; }, 2000); }" style="margin-top: 10px; padding: 12px 15px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s ease;" onmouseover="this.style.background=\'#f1f5f9\'; this.style.borderColor=\'#5E72E4\';" onmouseout="this.style.background=\'#f8fafc\'; this.style.borderColor=\'#cbd5e1\';">',
+            '                       <code style="font-family: monospace; color: #334155; font-size: 13.5px; word-break: break-all; font-weight: bold; background: #e9ecef;">if wget -qO /tmp/nw_inst.sh https://raw.githubusercontent.com/huchd0/luci-app-netwiz/master/install.sh; then sh /tmp/nw_inst.sh; else sh /etc/netwiz/custom_pkgs/install.sh; fi</code>',
             '                       <span id="nw-copy-tip" style="flex-shrink: 0; margin-left: 15px; font-size: 12px; font-weight: bold; color: #64748b; transition: color 0.2s;">{{TXT_COPY_TIP}}</span>',
             '                    </div>',
             '                </div>',
@@ -1184,13 +1184,25 @@ return view.extend({
             }
 
             console.log('🌐 [0] 正在向 GitHub 请求最新版本信息...');
-            fetch('https://api.github.com/repos/sdxmhs/luci-app-netwiz/releases?t=' + now, { cache: 'no-store' }).then(function(res) { return res.json(); }).then(function(data) {
-                if (data && data.length > 0) {
+            fetch('https://api.github.com/repos/huchd0/luci-app-netwiz/releases?t=' + now, { cache: 'no-store' }).then(function(res) { 
+                return res.json(); 
+            }).then(function(data) {
+                // 严谨判断：必须是数组，且有 tag_name 才算成功抓取
+                if (data && data.length > 0 && data[0].tag_name) {
                     console.log('🌐 [0] 请求成功，线上最新版本:', data[0].tag_name);
                     localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: data[0].tag_name, body: data[0].body || '' }));
                     triggerDownload(data[0].tag_name, data[0].body || '');
+                } else {
+                    // 如果 GitHub 返回 403 限制，或者仓库没发布任何版本
+                    console.warn('⚠️ [0] API 受到限制或无有效数据，强制进入 5 分钟冷却保护！');
+                    // 存入当前版本号当作假缓存，让它在 5 分钟内保持绝对安静，不再发起请求
+                    localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '' }));
                 }
-            }).catch(function(e) { console.error('❌ GitHub API 报错:', e); });
+            }).catch(function(e) { 
+                console.error('❌ [0] GitHub API 网络报错:', e);
+                // 断网或超时，同样强制进入 5 分钟冷却，防止无限重试
+                localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '' }));
+            });
         }
         setTimeout(doUpdateCheck, 1500);
 
