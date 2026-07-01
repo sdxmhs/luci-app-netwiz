@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_notes:
-        description: '【更新说明】 填写本次更新的具体内容、修复的 Bug 或备注（支持换行，将直接显示在路由器的升级弹窗中）'
+        description: '【更新说明】 填写版本更新的具体内容、修复的 Bug 或备注（支持换行，将显示在右上角手动升级的弹窗中）'
         required: false
         type: string
       new_version:
