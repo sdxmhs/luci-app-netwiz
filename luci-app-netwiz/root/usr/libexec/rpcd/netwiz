@@ -929,7 +929,7 @@ F_MAIN="${PREFIX}luci-app-netwiz${EXT}"
 F_CN="${PREFIX}luci-i18n-netwiz-zh-cn${EXT}"
 F_TW="${PREFIX}luci-i18n-netwiz-zh-tw${EXT}"
 
-URL_BASE="https://github.com/huchd0/luci-app-netwiz/releases/download/${TARGET_VER}"
+URL_BASE="https://github.com/sdxmhs/luci-app-netwiz/releases/download/${TARGET_VER}"
 PROXY_BASE="https://mirror.ghproxy.com/${URL_BASE}"
 
 # 定义支持 3 次重试 + 忽略证书 + 文件大小校验的下载函数
