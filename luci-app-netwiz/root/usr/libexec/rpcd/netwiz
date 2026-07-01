@@ -974,21 +974,27 @@ EOF
 #!/bin/sh
 sleep 2
 
-# 直接覆盖安装
 if command -v apk >/dev/null 2>&1; then
     EXT=".apk"
-    apk add --allow-untrusted --force-overwrite /tmp/nw_ota_main${EXT} /tmp/nw_ota_cn${EXT} /tmp/nw_ota_tw${EXT} >/dev/null 2>&1
+    # 卸载旧版，再安装本地新版
+    apk del luci-app-netwiz >/dev/null 2>&1
+    apk add --allow-untrusted --force-overwrite /tmp/nw_ota_main${EXT} /tmp/nw_ota_cn${EXT} /tmp/nw_ota_tw${EXT} > /tmp/netwiz_install.log 2>&1
+    INSTALL_STATUS=$?
 else
     EXT=".ipk"
-    opkg install /tmp/nw_ota_main${EXT} /tmp/nw_ota_cn${EXT} /tmp/nw_ota_tw${EXT} --force-reinstall --force-overwrite --force-maintainer >/dev/null 2>&1
+    opkg install /tmp/nw_ota_main${EXT} /tmp/nw_ota_cn${EXT} /tmp/nw_ota_tw${EXT} --force-reinstall --force-overwrite --force-maintainer > /tmp/netwiz_install.log 2>&1
+    INSTALL_STATUS=$?
 fi
 
-# 安装完成后，清理缓存和安装包
-rm -rf /tmp/luci-modulecache/ /tmp/luci-indexcache* /tmp/luci-app-netwiz.*
-rm -f /tmp/netwiz_update.ready /tmp/netwiz_update.* /tmp/nw_ota_* /tmp/nw_install.sh
-
-# 让后端重新生成 JS 版本号
-ubus call luci reload >/dev/null 2>&1
+# 只有安装成功 (状态码为 0) 才清理就绪文件和安装包
+if [ "$INSTALL_STATUS" -eq 0 ]; then
+    rm -rf /tmp/luci-modulecache/ /tmp/luci-indexcache* /tmp/luci-app-netwiz.*
+    rm -f /tmp/netwiz_update.ready /tmp/netwiz_update.* /tmp/nw_ota_* /tmp/nw_install.sh
+    ubus call luci reload >/dev/null 2>&1
+else
+    # 安装失败则记录日志，不清理现场，方便排查
+    echo "❌ Error: Installation failed with exit code $INSTALL_STATUS. Check /tmp/netwiz_install.log" >> /tmp/netwiz_install.log
+fi
 EOF
                     chmod +x /tmp/nw_install.sh
                     /tmp/nw_install.sh </dev/null >/dev/null 2>&1 &
