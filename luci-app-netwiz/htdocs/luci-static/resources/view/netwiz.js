@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 sdxmhs <https://github.com/sdxmhs/luci-app-netwiz>
+ * Copyright (C) 2026 huchd0 <https://github.com/huchd0/luci-app-netwiz>
  * Licensed under the GNU General Public License v3.0
  */
 'use strict';
