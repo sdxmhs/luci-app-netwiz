@@ -12,7 +12,7 @@ var T = {
     'Network_Wizard': _('Network Wizard'),
     'TITLE': _('Netwiz NETWORK SETUP'),
     'SUBTITLE': _('Pure · Secure · Non-destructive Minimalist Config'),
-    'APP_VERSION': 'v1.0.0',
+    'APP_VERSION': 'v0.1.0',
     'MODE_ROUTER_TITLE': _('DHCP / Static IP (WAN)'),
     'MODE_ROUTER_DESC': _('Automatically obtain IP from the upstream network, or manually set a static IP.'),
     'MODE_PPPOE_TITLE': _('PPPoE Dial-up'),
@@ -1104,7 +1104,7 @@ return view.extend({
                 verTag.addEventListener('click', function() {
                     openModal({
                         title: T['U_NEW_TITLE'] + ' (' + latestVer + ')',
-                        msg: '<b>' + T['U_READY_MSG'] + '</b><br><br><div style="text-align:left; font-size:13px; background:#f1f5f9; padding:10px; margin-top:10px; border-radius:6px; max-height:150px; overflow-y:auto; border:1px solid #cbd5e1;">' + cleanText.replace(/\n/g, '<br>') + '</div>',
+                        msg: '<b>' + T['U_READY_MSG'] + '</b><br><br><div style="text-align:left; font-size:13px; background:#f1f5f9; padding:10px; margin:5px 0 20px 0; border-radius:6px; max-height:150px; overflow-y:auto; border:1px solid #cbd5e1;">' + cleanText.replace(/\n/g, '<br>') + '</div>',
                         okText: T['U_BTN_NOW'], cancelText: T['U_BTN_LATER'],
                         onOk: function() {
                             localStorage.setItem('nw_update_cooldown', Date.now());
