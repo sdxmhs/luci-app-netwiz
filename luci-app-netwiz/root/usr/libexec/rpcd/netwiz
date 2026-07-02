@@ -954,9 +954,9 @@ EOF
                         exit 0
                         
                     # 无感热重载
-                    elif [ "$mode" = "do_install" ]; then
-                        echo '{"result":0}'
-                        cat << 'EOF' > /tmp/nw_install.sh
+                elif [ "$mode" = "do_install" ]; then
+                    echo '{"result":0}'
+                    cat << 'EOF' > /tmp/nw_install.sh
 #!/bin/sh
 sleep 2
 
@@ -978,7 +978,7 @@ INSTALL_LIST=""
 [ -f "$F_TW" ] && INSTALL_LIST="$INSTALL_LIST $F_TW"
 
 if [ "$EXT" = ".apk" ]; then
-    # 卸载语言包，再卸载主程序，旧文件
+    # 先卸载旧包解除依赖锁
     apk del luci-i18n-netwiz-zh-cn luci-i18n-netwiz-zh-tw >/dev/null 2>&1
     apk del luci-app-netwiz >/dev/null 2>&1
     apk add --allow-untrusted --force-overwrite $INSTALL_LIST > /tmp/netwiz_install.log 2>&1
@@ -988,18 +988,22 @@ else
     INSTALL_STATUS=$?
 fi
 
+# ================= 清理 =================
+# 彻底粉碎下载的包和临时标志
+rm -f "$F_MAIN" "$F_CN" "$F_TW" /tmp/apk_luci-* /tmp/ipk_luci-*
+rm -f /tmp/netwiz_update.ready /tmp/netwiz_update.version /tmp/nw_install.sh /tmp/nw_dl.sh
+
 if [ "$INSTALL_STATUS" -eq 0 ]; then
     rm -rf /tmp/luci-modulecache/ /tmp/luci-indexcache* /tmp/luci-app-netwiz.*
-    rm -f /tmp/netwiz_update.ready /tmp/netwiz_update.* /tmp/nw_install.sh /tmp/apk_luci-* /tmp/ipk_luci-*
     ubus call luci reload >/dev/null 2>&1
 else
     echo "❌ Error: Installation failed with exit code $INSTALL_STATUS. Check /tmp/netwiz_install.log" >> /tmp/netwiz_install.log
 fi
 EOF
-                        chmod +x /tmp/nw_install.sh
-                        /tmp/nw_install.sh </dev/null >/dev/null 2>&1 &
-                        exit 0
-                    fi
+                    chmod +x /tmp/nw_install.sh
+                    /tmp/nw_install.sh </dev/null >/dev/null 2>&1 &
+                    exit 0
+                fi
                     # ==========================================
 
                     # ==========================================
