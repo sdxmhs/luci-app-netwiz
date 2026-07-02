@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 huchd0 <https://github.com/huchd0/luci-app-netwiz>
+ * Copyright (C) 2026 sdxmhs <https://github.com/sdxmhs/luci-app-netwiz>
  * Licensed under the GNU General Public License v3.0
  */
 'use strict';
@@ -1368,7 +1368,8 @@ return view.extend({
                             list.insertBefore(draggingEl, next ? target.nextSibling : target);
                         }
                     });
-                }, 100);
+                    window.location.reload(true); // 强制忽略浏览器缓存刷新当前页面
+                }, 3000);
             });
         }
 
