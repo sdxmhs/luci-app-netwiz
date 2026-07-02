@@ -1069,10 +1069,6 @@ return view.extend({
         function doUpdateCheck() {
             var now = Date.now(), cacheKey = 'nw_last_update_check';
             var cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-            var cooldown = parseInt(localStorage.getItem('nw_update_cooldown') || '0', 10);
-
-            if (now - cooldown < 3 * 60 * 1000) return;
-
             var currentVer = T['APP_VERSION'] || 'v1.0.0';
 
             var checkOTA = rpc.declare({
@@ -1103,17 +1099,42 @@ return view.extend({
                         msg: '<b>' + T['U_READY_MSG'] + '</b><br><br><div style="text-align:left; font-size:13px; background:#f1f5f9; padding:10px; margin:5px 0 20px 0; border-radius:6px; max-height:150px; overflow-y:auto; border:1px solid #cbd5e1;">' + cleanText.replace(/\n/g, '<br>') + '</div>',
                         okText: T['U_BTN_NOW'], cancelText: T['U_BTN_LATER'],
                         onOk: function() {
-                            localStorage.setItem('nw_update_cooldown', Date.now());
+                            // 确定升级，删除本地的缓存记录
+                            // 安装完毕后，首次加载重新去 GitHub 核对新版本
                             localStorage.removeItem(cacheKey);
+                            
                             redDot.style.display = 'none';
                             verTag.classList.remove('has-update');
                             var gm = document.getElementById('nw-global-modal'); if (gm) gm.style.display = 'none';
+                            
                             openModal({ title: T['U_UPGRADING_TITLE'], msg: T['U_UPGRADING_MSG'], hideCancel: true, hideOk: true, spin: true });
+                            
                             callNetSetup('do_install').then(function(){
-                                setTimeout(function(){
-                                    var url = window.location.href.split('?')[0];
-                                    window.location.replace(url + '?_t=' + Date.now());
-                                }, 6000);
+                                // 主动探测系统是否已清理完缓存
+                                var waitSec = 0;
+                                var pollTimer = setInterval(function() {
+                                    waitSec += 2;
+                                    var pMsg = document.querySelector('#nw-global-msg');
+                                    if (pMsg) pMsg.innerHTML = '<div style="color:#3b82f6; font-size:15px; font-weight:bold;">' + T['U_UPGRADING_MSG'] + '<br><br>⏳ 系统底层缓存重建中... (' + waitSec + 's)</div>';
+                                    
+                                    // 底层 8 秒的执行和清理空间，然后开始探活
+                                    if (waitSec >= 8) {
+                                        fetch(window.location.href.split('?')[0] + '?_t=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+                                        .then(function(res) {
+                                            if (res.ok) {
+                                                clearInterval(pollTimer);
+                                                // 探活成功！附带时间戳执行强力无视缓存的重定向
+                                                window.location.replace(window.location.href.split('?')[0] + '?_t=' + Date.now());
+                                            }
+                                        }).catch(function(){});
+                                    }
+                                    
+                                    // 等 25 秒强制刷新
+                                    if (waitSec >= 25) {
+                                        clearInterval(pollTimer);
+                                        window.location.replace(window.location.href.split('?')[0] + '?_t=' + Date.now());
+                                    }
+                                }, 2000);
                             }).catch(function(){});
                         }
                     });
@@ -1137,7 +1158,7 @@ return view.extend({
                 if (latestVer) {
                     if (compareVer(latestVer, currentVer) > 0) {
                         console.log('🔍 [1] 触发版本比对: 线上=' + latestVer + ' | 本地=' + currentVer);
-                        console.log('🚀 [2] 发现新版本！正在呼叫后台检查状态...');
+                        console.log('🚀 [2] 发现新版本！正在后台检查状态...');
                         checkOTA('check_update', latestVer).then(function(res) {
                             var rCode = (res !== null && typeof res === 'object' && res.result !== undefined) ? res.result : res;
                             if (String(rCode) === '1') {
@@ -1150,7 +1171,7 @@ return view.extend({
                                 var pollCount = 0, pollStatus = setInterval(function() {
                                     pollCount++;
                                     if (pollCount > 15) {
-                                        console.log('❌ [4] 轮询后端 60 秒超时！可能遭遇网络问题或下载假文件被清理。');
+                                        console.log('❌ [4] 轮询后端超时！可能遭遇网络问题或下载了问题文件而被阻断。');
                                         clearInterval(pollStatus); return;
                                     }
                                     checkOTA('check_update', latestVer).then(function(r) {
@@ -1165,42 +1186,38 @@ return view.extend({
                             }
                         }).catch(function(e) { console.error('❌ [3] RPC 呼叫 checkOTA 失败:', e); });
                     } else {
-                        // 如果线上版本 <= 本地版本，打印结论
-                        console.log('✅ [1] 比对完毕：当前固件已是最新版本，或正处于防刷冷却期中。');
+                        console.log('✅ [1] 比对完毕：当前固件已是最新版本，或处于防刷保护中。');
                     }
                 }
             };
 
-            // ========== 核心改动：透明化缓存读取日志 ==========
+            // ========== 缓存读取日志 ==========
             if (cached.time && (now - cached.time < 5 * 60 * 1000) && cached.version) {
                 var remainSec = Math.ceil((5 * 60 * 1000 - (now - cached.time)) / 1000);
                 if (cached.isFallback) {
-                    console.warn('🛡️ [0] API 请求曾受限，当前处于【静默冷却保护期】 (将在 ' + remainSec + ' 秒后解除)。');
+                    console.warn('🛡️ [0] API 曾受限，当前处于【静默冷却期】 (剩 ' + remainSec + ' 秒)。');
                 } else {
-                    console.log('🌐 [0] 命中本地正常 GitHub 缓存 (距下次强制联网获取还剩 ' + remainSec + ' 秒)。');
+                    console.log('🌐 [0] 命中缓存 (距下次联网获取还剩 ' + remainSec + ' 秒)。');
                 }
-                triggerDownload(cached.version, cached.body || ''); 
+                triggerDownload(cached.version, cached.body || '');
                 return;
             }
 
-            console.log('🌐 [0] 缓存已过期或无缓存，正在向 GitHub 发起真实网络请求...');
+            console.log('🌐 [0] 缓存已过期或无缓存，发起真实网络请求...');
             fetch('https://api.github.com/repos/sdxmhs/luci-app-netwiz/releases?t=' + now, { cache: 'no-store' }).then(function(res) { 
                 return res.json(); 
             }).then(function(data) {
                 if (data && data.length > 0 && data[0].tag_name) {
-                    console.log('🌐 [0] 请求成功！获取到真实线上最新版本:', data[0].tag_name);
-                    // 真实有效的数据，isFallback 留空或为 false
+                    console.log('🌐 [0] 请求成功！获取到线上版本:', data[0].tag_name);
                     localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: data[0].tag_name, body: data[0].body || '' }));
                     triggerDownload(data[0].tag_name, data[0].body || '');
                 } else {
-                    console.warn('⚠️ [0] API 受到限制 (如 403 封禁) 或无有效数据！生成【伪缓存】并强制静默 5 分钟！');
-                    // 加上 isFallback: true 标记
+                    console.warn('⚠️ [0] API 受限或无有效数据！生成【伪缓存】静默 5 分钟！');
                     localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '', isFallback: true }));
                 }
             }).catch(function(e) { 
-                console.error('❌ [0] GitHub API 网络断开或跨域阻断:', e);
-                console.warn('🛡️ [0] 生成【伪缓存】并强制静默 5 分钟，防止请求风暴...');
-                // 加上 isFallback: true 标记
+                console.error('❌ [0] API 网络阻断:', e);
+                console.warn('🛡️ [0] 生成【伪缓存】静默 5 分钟，防止请求风暴...');
                 localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '', isFallback: true }));
             });
         }
