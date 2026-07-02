@@ -1155,18 +1155,18 @@ return view.extend({
                                 var pollCount = 0, pollStatus = setInterval(function() {
                                     pollCount++;
                                     if (pollCount > 15) {
-                                        console.log('❌ [5] 轮询 60 秒超时！后台未能生成 .ready 文件！请去 SSH 检查下载是否失败。');
+                                        console.log('❌ [5] 轮询后端 60 秒超时！后台未能生成 .ready 文件！请去 SSH 检查下载是否失败。');
                                         clearInterval(pollStatus); return;
                                     }
                                     checkOTA('check_update', latestVer).then(function(r) {
                                         var rC = (r !== null && typeof r === 'object' && r.result !== undefined) ? r.result : r;
-                                        console.log('🔄 [轮询 ' + pollCount + '/15] 后台返回:', r);
+                                        console.log('🔄 [轮询后端 ' + pollCount + '/15] 后台返回:', r);
                                         if (String(rC) === '1') {
                                             console.log('🎉 [6] 监测到下载完成！准备点亮红点！');
                                             clearInterval(pollStatus);
                                             showReadyBadge(latestVer, rawText);
                                         }
-                                    }).catch(function(e){ console.error('❌ 轮询 RPC 报错:', e); });
+                                    }).catch(function(e){ console.error('❌ 轮询后端 RPC 报错:', e); });
                                 }, 4000);
                             }
                         }).catch(function(e) {
