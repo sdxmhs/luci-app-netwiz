@@ -1099,8 +1099,8 @@ return view.extend({
                         msg: '<b>' + T['U_READY_MSG'] + '</b><br><br><div style="text-align:left; font-size:13px; background:#f1f5f9; padding:10px; margin:5px 0 20px 0; border-radius:6px; max-height:150px; overflow-y:auto; border:1px solid #cbd5e1;">' + cleanText.replace(/\n/g, '<br>') + '</div>',
                         okText: T['U_BTN_NOW'], cancelText: T['U_BTN_LATER'],
                         onOk: function() {
-                            // 确定升级，删除本地的缓存记录
-                            // 安装完毕后，首次加载重新去 GitHub 核对新版本
+                            // 点击升级后，立刻撕毁防刷锁与更新缓存
+                            localStorage.removeItem('nw_update_cooldown');
                             localStorage.removeItem(cacheKey);
                             
                             redDot.style.display = 'none';
@@ -1110,28 +1110,35 @@ return view.extend({
                             openModal({ title: T['U_UPGRADING_TITLE'], msg: T['U_UPGRADING_MSG'], hideCancel: true, hideOk: true, spin: true });
                             
                             callNetSetup('do_install').then(function(){
-                                // 主动探测系统是否已清理完缓存
                                 var waitSec = 0;
                                 var pollTimer = setInterval(function() {
                                     waitSec += 2;
                                     var pMsg = document.querySelector('#nw-global-msg');
-                                    if (pMsg) pMsg.innerHTML = '<div style="color:#3b82f6; font-size:15px; font-weight:bold;">' + T['U_UPGRADING_MSG'] + '<br><br>⏳ 系统底层缓存重建中... (' + waitSec + 's)</div>';
+                                    if (pMsg) pMsg.innerHTML = '<div style="color:#3b82f6; font-size:15px; font-weight:bold;">' + T['U_UPGRADING_MSG'] + '<br><br>⏳ 正在安装并重建底层缓存... (' + waitSec + 's)</div>';
                                     
-                                    // 底层 8 秒的执行和清理空间，然后开始探活
-                                    if (waitSec >= 8) {
+                                    // 安装通常需要 10~20 秒，第 12 秒后才开始安全探活
+                                    if (waitSec >= 12) {
                                         fetch(window.location.href.split('?')[0] + '?_t=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
                                         .then(function(res) {
                                             if (res.ok) {
                                                 clearInterval(pollTimer);
-                                                // 探活成功！附带时间戳执行强力无视缓存的重定向
+                                                // 彻底摧毁 LuCI 的会话视图缓存
+                                                sessionStorage.clear();
+                                                for (var i = localStorage.length - 1; i >= 0; i--) {
+                                                    var k = localStorage.key(i);
+                                                    if (k && (k.indexOf('nw_') === 0 || k.indexOf('luci') !== -1)) {
+                                                        localStorage.removeItem(k);
+                                                    }
+                                                }
                                                 window.location.replace(window.location.href.split('?')[0] + '?_t=' + Date.now());
                                             }
                                         }).catch(function(){});
                                     }
                                     
-                                    // 等 25 秒强制刷新
-                                    if (waitSec >= 25) {
+                                    // 兜底时间延长到 40 秒，防止因网络波动卡死
+                                    if (waitSec >= 40) {
                                         clearInterval(pollTimer);
+                                        sessionStorage.clear();
                                         window.location.replace(window.location.href.split('?')[0] + '?_t=' + Date.now());
                                     }
                                 }, 2000);
