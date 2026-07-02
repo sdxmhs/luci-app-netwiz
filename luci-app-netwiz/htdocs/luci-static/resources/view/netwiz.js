@@ -3584,12 +3584,22 @@ return view.extend({
                     var isWanDown = false;
                     if (isWispActive) {
                         isWanDown = false; // 如果中继生效，不弹网线未插警告
+                    } else if (wProto === 'pppoe') {
+                        // PPPoE 模式下，虚拟接口在拨号成功前 l1up 永远是 false
+                        isWanDown = false;
                     } else {
                         if (typeof activeWan.l1up !== 'undefined') {
                             isWanDown = (activeWan.l1up === false);
                         } else {
                             isWanDown = (activeWan.up === false && (!liveWanIp || liveWanIp === T['TXT_GETTING'] || liveWanIp === T['TXT_NOT_GOT']));
                         }
+                    }
+
+                    // 网卡驱动 Bug 和软路由虚拟网卡
+                    // 只要探针检测到网络畅通 (ok)，或者底层网卡明确 UP 且已经拿到了合法 IP
+                    // 无论底层驱动报不报物理断开 (l1up: false)，都判定网线已连接
+                    if (window.nwInetStatus === 'ok' || (activeWan.up === true && liveWanIp && liveWanIp !== T['TXT_GETTING'] && liveWanIp !== T['TXT_NOT_GOT'])) {
+                        isWanDown = false;
                     }
 
                     // 初始化防抖计数器
