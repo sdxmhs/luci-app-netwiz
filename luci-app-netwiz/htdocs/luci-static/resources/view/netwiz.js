@@ -1114,7 +1114,11 @@ return view.extend({
                             var gm = document.getElementById('nw-global-modal'); if (gm) gm.style.display = 'none';
                             openModal({ title: T['U_UPGRADING_TITLE'], msg: T['U_UPGRADING_MSG'], hideCancel: true, hideOk: true, spin: true });
                             callNetSetup('do_install').then(function(){
-                                setTimeout(function(){ window.location.reload(); }, 6000);
+                                setTimeout(function(){
+                                    // 载入全新的页面数据
+                                    var url = window.location.href.split('?')[0];
+                                    window.location.replace(url + '?_t=' + Date.now());
+                                }, 6000);
                             }).catch(function(){});
                         }
                     });
