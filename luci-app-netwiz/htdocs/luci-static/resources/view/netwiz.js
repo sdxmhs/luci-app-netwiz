@@ -1075,7 +1075,6 @@ return view.extend({
 
             var currentVer = T['APP_VERSION'] || 'v1.0.0';
 
-            // RPC 通道，不限制返回值
             var checkOTA = rpc.declare({
                 object: 'netwiz',
                 method: 'set_network',
@@ -1088,10 +1087,7 @@ return view.extend({
                 var verTag = container.querySelector('.nw-version-tag');
                 var redDot = container.querySelector('.nw-version-dot');
 
-                if (!verTag || !redDot) {
-                    console.error('❌ [UI 错误] 找不到版本号元素！请确认 HTML 里有 class="nw-version-tag" 和 class="nw-version-dot"');
-                    return;
-                }
+                if (!verTag || !redDot) return;
 
                 redDot.style.display = 'block';
                 verTag.classList.add('has-update');
@@ -1115,7 +1111,6 @@ return view.extend({
                             openModal({ title: T['U_UPGRADING_TITLE'], msg: T['U_UPGRADING_MSG'], hideCancel: true, hideOk: true, spin: true });
                             callNetSetup('do_install').then(function(){
                                 setTimeout(function(){
-                                    // 载入全新的页面数据
                                     var url = window.location.href.split('?')[0];
                                     window.location.replace(url + '?_t=' + Date.now());
                                 }, 6000);
@@ -1127,9 +1122,6 @@ return view.extend({
             };
 
             var triggerDownload = function(latestVer, rawText) {
-                console.log('🔍 [1] 触发版本比对: 线上=' + latestVer + ' | 本地=' + currentVer);
-
-                // 内置无敌的版本号比对引擎，彻底摆脱外部依赖
                 var compareVer = function(v1, v2) {
                     var a = (v1 || '').replace(/[^0-9.]/g, '').split('.');
                     var b = (v2 || '').replace(/[^0-9.]/g, '').split('.');
@@ -1144,68 +1136,72 @@ return view.extend({
 
                 if (latestVer) {
                     if (compareVer(latestVer, currentVer) > 0) {
-                        console.log('🚀 [2] 需要更新！正在呼叫后台检查状态...');
+                        console.log('🔍 [1] 触发版本比对: 线上=' + latestVer + ' | 本地=' + currentVer);
+                        console.log('🚀 [2] 发现新版本！正在呼叫后台检查状态...');
                         checkOTA('check_update', latestVer).then(function(res) {
-                            console.log('📦 [3] 后台初次检查返回:', res);
                             var rCode = (res !== null && typeof res === 'object' && res.result !== undefined) ? res.result : res;
-
                             if (String(rCode) === '1') {
-                                console.log('✅ [4] 后台已有 .ready，直接显示红点！');
+                                console.log('✅ [3] 后台已有 .ready，直接显示红点！');
                                 showReadyBadge(latestVer, rawText);
                             } else {
-                                console.log('⏳ [4] 后台未就绪，下发 prepare_update 开始下载...');
+                                console.log('⏳ [3] 后台未就绪，下发 prepare_update 开始下载...');
                                 callNetSetup('prepare_update', latestVer);
 
                                 var pollCount = 0, pollStatus = setInterval(function() {
                                     pollCount++;
                                     if (pollCount > 15) {
-                                        console.log('❌ [5] 轮询后端 60 秒超时！后台未能生成 .ready 文件！请去 SSH 检查下载是否失败。');
+                                        console.log('❌ [4] 轮询后端 60 秒超时！可能遭遇网络问题或下载假文件被清理。');
                                         clearInterval(pollStatus); return;
                                     }
                                     checkOTA('check_update', latestVer).then(function(r) {
                                         var rC = (r !== null && typeof r === 'object' && r.result !== undefined) ? r.result : r;
-                                        console.log('🔄 [轮询后端 ' + pollCount + '/15] 后台返回:', r);
                                         if (String(rC) === '1') {
-                                            console.log('🎉 [6] 监测到下载完成！准备点亮红点！');
+                                            console.log('🎉 [4] 监测到下载完成！准备点亮红点！');
                                             clearInterval(pollStatus);
                                             showReadyBadge(latestVer, rawText);
                                         }
-                                    }).catch(function(e){ console.error('❌ 轮询后端 RPC 报错:', e); });
+                                    }).catch(function(){});
                                 }, 4000);
                             }
-                        }).catch(function(e) {
-                            console.error('❌ [3] RPC 呼叫 checkOTA 失败:', e);
-                        });
+                        }).catch(function(e) { console.error('❌ [3] RPC 呼叫 checkOTA 失败:', e); });
                     } else {
-                        console.log('✅ [1] 当前已是最新版本，无需更新。');
+                        // 如果线上版本 <= 本地版本，打印结论
+                        console.log('✅ [1] 比对完毕：当前固件已是最新版本，或正处于防刷冷却期中。');
                     }
                 }
             };
 
+            // ========== 核心改动：透明化缓存读取日志 ==========
             if (cached.time && (now - cached.time < 5 * 60 * 1000) && cached.version) {
-                console.log('🌐 [0] 使用本地缓存的 GitHub 版本信息');
-                triggerDownload(cached.version, cached.body || ''); return;
+                var remainSec = Math.ceil((5 * 60 * 1000 - (now - cached.time)) / 1000);
+                if (cached.isFallback) {
+                    console.warn('🛡️ [0] API 请求曾受限，当前处于【静默冷却保护期】 (将在 ' + remainSec + ' 秒后解除)。');
+                } else {
+                    console.log('🌐 [0] 命中本地正常 GitHub 缓存 (距下次强制联网获取还剩 ' + remainSec + ' 秒)。');
+                }
+                triggerDownload(cached.version, cached.body || ''); 
+                return;
             }
 
-            console.log('🌐 [0] 正在向 GitHub 请求最新版本信息...');
+            console.log('🌐 [0] 缓存已过期或无缓存，正在向 GitHub 发起真实网络请求...');
             fetch('https://api.github.com/repos/sdxmhs/luci-app-netwiz/releases?t=' + now, { cache: 'no-store' }).then(function(res) { 
                 return res.json(); 
             }).then(function(data) {
-                // 严谨判断：必须是数组，且有 tag_name 才算成功抓取
                 if (data && data.length > 0 && data[0].tag_name) {
-                    console.log('🌐 [0] 请求成功，线上最新版本:', data[0].tag_name);
+                    console.log('🌐 [0] 请求成功！获取到真实线上最新版本:', data[0].tag_name);
+                    // 真实有效的数据，isFallback 留空或为 false
                     localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: data[0].tag_name, body: data[0].body || '' }));
                     triggerDownload(data[0].tag_name, data[0].body || '');
                 } else {
-                    // 如果 GitHub 返回 403 限制，或者仓库没发布任何版本
-                    console.warn('⚠️ [0] API 受到限制或无有效数据，强制进入 5 分钟冷却保护！');
-                    // 存入当前版本号当作假缓存，让它在 5 分钟内保持绝对安静，不再发起请求
-                    localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '' }));
+                    console.warn('⚠️ [0] API 受到限制 (如 403 封禁) 或无有效数据！生成【伪缓存】并强制静默 5 分钟！');
+                    // 加上 isFallback: true 标记
+                    localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '', isFallback: true }));
                 }
             }).catch(function(e) { 
-                console.error('❌ [0] GitHub API 网络报错:', e);
-                // 断网或超时，同样强制进入 5 分钟冷却，防止无限重试
-                localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '' }));
+                console.error('❌ [0] GitHub API 网络断开或跨域阻断:', e);
+                console.warn('🛡️ [0] 生成【伪缓存】并强制静默 5 分钟，防止请求风暴...');
+                // 加上 isFallback: true 标记
+                localStorage.setItem(cacheKey, JSON.stringify({ time: now, version: currentVer, body: '', isFallback: true }));
             });
         }
         setTimeout(doUpdateCheck, 1500);
